@@ -48,11 +48,20 @@ typedef struct message_struct{
 
 typedef struct value_truct{
 	int value;
-	int timestamp;
+	time_t timestamp;
 	int source;
 }val;
-
 map<int,val> key_value;
+
+typedef struct get_truct{
+	int value;
+	int timestamp;
+	int level;
+}get;
+map<int, get> get_map;
+
+
+
 
 /*This is a helper function to set up UDP receive*/
 int init_recv()
@@ -173,6 +182,12 @@ void get_key(int key, int level){
 		msg.feedback = false;
 		strcpy(msg.request_type,"get");
 		msg.key = key;
+		get input;
+		input.value = 0;
+		input.level = level;
+		input.timestamp = 0;
+		get_map.insert(pair<int, get>(key, input));
+		
 		for(int i = 0; i < SERVER_NO; i++){
 			if(server_id != i){
 				server_send(IP[i], i, msg);
@@ -215,8 +230,40 @@ int server_receive(message* msg){
 void* server_accept(void *identifier){
 	while(1){
 		message msg;
-		server_receive(&msg);
+		if(server_receive(&msg) > 0){
+			if(msg.request == true){
+				string type = msg.request_type;
+				if(type.compare("delete") == 0){
+				
+					key_value.erase(msg.key);
+					
+				}else if(type.compare("get") == 0){
+					
+					if(key_value.find(msg.key) != key_value.end()){
+						message fb;
+						fb.request = false;
+						fb.source = server_id;
+						fb.feedback = true;
+						fb.key = msg.key
+						strcpy(fb.request_type,"delete");
+						fb.value = (key_value.find(key)->second).value;
+						server_send(IP[msg.source], msg.source, fb);
+						
+					}
+					
+				}else if(type.compare("insert") == 0){
+					insert_key(op1, op2, op3);
+				}else if(type.compare("update") == 0){
+					update_key(op1, op2, op3);
+				}else if(type.compare("show-all") == 0){
+					show_all();
+				}else if(type.compare("search") == 0){
+					search_key(op1);
+				}
+			}
+		}
 	}
+	
 }
 
 
