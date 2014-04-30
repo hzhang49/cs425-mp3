@@ -3,7 +3,7 @@ SERVER_OBJS = server.o
 
 
 COMPILER = g++
-COMPILER_OPTS = -c -g -O0 -Wall -lpthread
+COMPILER_OPTS = -c -g -O0 -Wall Werror -lpthread
 LINKER = g++
 LINKER_OPTS = -lpthread
 

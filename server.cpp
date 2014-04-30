@@ -16,8 +16,11 @@
 #include <iostream>
 #include <string>
 #include <string.h>
+#include <map>
 
 #define		SERVER_NO	4
+
+using namespace std;
 
 int server_id;
 int delay[SERVER_NO];
@@ -36,8 +39,20 @@ typedef struct message_struct{
 	bool request;
 	bool feedback;
 
+	char request_type[10];
+
+	int key;
+	int value;
+	time_t timestamp;
 } message;
 
+typedef struct value_truct{
+	int value;
+	int timestamp;
+	int source;
+}val;
+
+map<int,val> key_value;
 
 /*This is a helper function to set up UDP receive*/
 int init_recv()
@@ -132,15 +147,53 @@ void server_send(char* destination_IP, int destination_ID, message msg){
 }
 
 void delete_key(int key){
-
+	key_value.erase(key);
+	message msg;
+	msg.source = server_id;
+	msg.request = true;
+	msg.feedback = false;
+	strcpy(msg.request_type,"delete");
+	msg.key = key;
+	for(int i = 0; i < SERVER_NO; i++){
+		if(server_id != i){
+			server_send(IP[i], i, msg);
+		}
+	}
 }
 
 void get_key(int key, int level){
-
+	if(level = 1){
+		if(key_value.find(key) != key_value.end()){
+			cout<<"found key "<<key<<" with value "<<(key_value.find(key)->second).value << '\n';
+		}
+	}else{
+		message msg;
+		msg.source = server_id;
+		msg.request = true;
+		msg.feedback = false;
+		strcpy(msg.request_type,"get");
+		msg.key = key;
+		for(int i = 0; i < SERVER_NO; i++){
+			if(server_id != i){
+				server_send(IP[i], i, msg);
+			}
+		}
+	}
 }
 
 void insert_key(int key, int value, int level){
+	if(level = 1){
+		if(key_value.find(key) == key_value.end()){
+			val input;
+			input.value = value;
+			input.source = server_id;
+			input.timestamp = time(0);
+			cout<<"time stamp is "<< input.timestamp<<'\n';
+			key_value.insert(pair<int, val> (key, input));
+		}
+	}else{
 
+	}
 }
 
 void update_key(int key, int value, int level){
@@ -205,9 +258,11 @@ int main(int argc, char *argv[]){
 	
 	while(1){
 		std::string op;
+		char temp[10];
 		int op1, op2, op3;
-		scanf("%s %i %i %i",op.c_str(), &op1, &op2, &op3);
-		std::cout << "we get "<< op<< op1<< op2<< op3<<'\n';
+		scanf("%s %i %i %i",temp, &op1, &op2, &op3);
+		op = temp;
+		//std::cout << "we get "<< op<< op1<< op2<< op3<<'\n';
 		if(op.compare("delete") == 0){
 			delete_key(op1);
 		}else if(op.compare("get") == 0){
