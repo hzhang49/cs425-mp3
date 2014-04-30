@@ -173,20 +173,27 @@ void delete_key(int key){
 void get_key(int key, int level){
 	if(level = 1){
 		if(key_value.find(key) != key_value.end()){
-			cout<<"found key "<<key<<" with value "<<(key_value.find(key)->second).value << '\n';
+			cout<<"found key "<<key<<" with value "<<(key_value.find(key)->second).value << "in level 1\n";
 		}
 	}else{
+		get input;
+		input.value = 0;
+		input.level = 3;
+		input.timestamp = 0;
+		get_map.insert(pair<int, get>(key, input));
+		if(key_value.find(key) != key_value.end()){
+			(get_map.find(key)->second).value = (key_value.find(key)->second).value;
+			(get_map.find(key)->second).level--;
+			(get_map.find(key)->second).timestamp = (key_value.find(key)->second).timestamp;
+		}
+		
 		message msg;
 		msg.source = server_id;
 		msg.request = true;
 		msg.feedback = false;
 		strcpy(msg.request_type,"get");
 		msg.key = key;
-		get input;
-		input.value = 0;
-		input.level = level;
-		input.timestamp = 0;
-		get_map.insert(pair<int, get>(key, input));
+		
 		
 		for(int i = 0; i < SERVER_NO; i++){
 			if(server_id != i){
@@ -207,7 +214,7 @@ void insert_key(int key, int value, int level){
 			key_value.insert(pair<int, val> (key, input));
 		}
 	}else{
-
+		
 	}
 }
 
@@ -244,22 +251,54 @@ void* server_accept(void *identifier){
 						fb.request = false;
 						fb.source = server_id;
 						fb.feedback = true;
-						fb.key = msg.key
-						strcpy(fb.request_type,"delete");
+						fb.key = msg.key;
+						strcpy(fb.request_type,"get");
 						fb.value = (key_value.find(key)->second).value;
+						fb.timestamp = (key_value.find(key)->second).timestamp;
 						server_send(IP[msg.source], msg.source, fb);
 						
 					}
 					
 				}else if(type.compare("insert") == 0){
-					insert_key(op1, op2, op3);
+					
 				}else if(type.compare("update") == 0){
-					update_key(op1, op2, op3);
+					
 				}else if(type.compare("show-all") == 0){
-					show_all();
+					
 				}else if(type.compare("search") == 0){
-					search_key(op1);
+					
 				}
+			}
+		}else if(msg.feedback == true){
+			string type = msg.request_type;
+			
+			/*if it's get feedback, and our server is still waiting for that key's replica*/
+			if((type.compare("get") == 0) && (get_map.find(msg.key) != get_map.end())){
+					
+				if((get_map.find(msg.key)->second).value == msg.value){
+					(get_map.find(msg.key)->second).level--;		//decrement consistency level
+					//update timestamp if our key's current timestamp is earlier then the one we get from msg
+					if((get_map.find(msg.key)->second).timestamp < msg.timestamp) (get_map.find(msg.key)->second).timestamp = msg.timestamp;
+				
+				//if our value is different from the one we get from other server, and their value is newer, update ours
+				}else if(((get_map.find(msg.key)->second).value != msg.value) && ((get_map.find(msg.key)->second).timestamp < msg.timestamp)){
+					(get_map.find(msg.key)->second).value = msg.value;
+					(get_map.find(msg.key)->second).timestamp = msg.timestamp;
+					(get_map.find(msg.key)->second).level--;
+				}
+				if((get_map.find(msg.key)->second).level == 0){
+					cout<< "found key " << msg.key<< "with value "<<(get_map.find(msg.key)->second).value << "in level 3\n";
+					get_map.erase(msg.key);
+				}
+					
+			}else if(type.compare("insert") == 0){
+					
+			}else if(type.compare("update") == 0){
+					
+			}else if(type.compare("show-all") == 0){
+					
+			}else if(type.compare("search") == 0){
+					
 			}
 		}
 	}
