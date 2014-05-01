@@ -181,9 +181,29 @@ void delete_key(int key){
 //if level 9, the server will send requests and print out the key-value after it get all three replicas, 
 //and if there's inconsistency, the value with largest timestamp will win
 void get_key(int key, int level){
-	if(level = 1){
+	if(level == 1){
 		if(key_value.find(key) != key_value.end()){
-			cout<<"found key "<<key<<" with value "<<(key_value.find(key)->second).value << "in level 1\n";
+			cout<<"found key "<<key<<" with value "<<(key_value.find(key)->second).value << " in level 1\n";
+		}else{
+			get input;
+			input.value = 0;
+			input.level = 1;
+			input.timestamp = 0;
+			get_map.insert(pair<int, get>(key, input));
+
+			message msg;
+			msg.source = server_id;
+			msg.request = true;
+			msg.feedback = false;
+			strcpy(msg.request_type,"get");
+			msg.key = key;
+		
+		
+			for(int i = 0; i < SERVER_NO; i++){
+				if(server_id != i){
+					server_send(IP[i], i, msg);
+				}
+			}
 		}
 	}else{
 		get input;
@@ -217,7 +237,7 @@ void get_key(int key, int level){
 //if level 1, the server will just store the key-value pair locally
 //if level 9, the server will store key-value pair to server with server_id != key mod 4
 void insert_key(int key, int value, int level){
-	if(level = 1){
+	if(level == 1){
 		if(key_value.find(key) == key_value.end()){
 			val input;
 			input.value = value;
@@ -330,9 +350,9 @@ void* server_accept(void *identifier){
 			
 			/*if it's get feedback, and our server is still waiting for that key's replica*/
 			if((type.compare("get") == 0) && (get_map.find(msg.key) != get_map.end())){
-					
+				(get_map.find(msg.key)->second).level--;		//decrement consistency level
 				if((get_map.find(msg.key)->second).value == msg.value){
-					(get_map.find(msg.key)->second).level--;		//decrement consistency level
+					
 					//update timestamp if our key's current timestamp is earlier then the one we get from msg
 					if((get_map.find(msg.key)->second).timestamp < msg.timestamp) (get_map.find(msg.key)->second).timestamp = msg.timestamp;
 				
@@ -340,10 +360,10 @@ void* server_accept(void *identifier){
 				}else if(((get_map.find(msg.key)->second).value != msg.value) && ((get_map.find(msg.key)->second).timestamp < msg.timestamp)){
 					(get_map.find(msg.key)->second).value = msg.value;
 					(get_map.find(msg.key)->second).timestamp = msg.timestamp;
-					(get_map.find(msg.key)->second).level--;
+					
 				}
 				if((get_map.find(msg.key)->second).level == 0){
-					cout<< "found key " << msg.key<< "with value "<<(get_map.find(msg.key)->second).value << "in level 3\n";
+					cout<< "found key " << msg.key<< " with value "<<(get_map.find(msg.key)->second).value << "\n";
 					get_map.erase(msg.key);
 				}
 					
