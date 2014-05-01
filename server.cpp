@@ -22,8 +22,8 @@
 
 using namespace std;
 
-int server_id;
-int delay[SERVER_NO];
+int server_id;				//the server id
+int delay[SERVER_NO];		//this server's delay time to other servers
 char IP[SERVER_NO][INET6_ADDRSTRLEN];		//IP addresses of each server specified in configFIle
 
 /*some variable for setting up UDP receive*/
@@ -34,25 +34,28 @@ int recv_rv;
 struct sockaddr_storage recv_their_addr;	socklen_t recv_addr_len;
 char recv_s[INET6_ADDRSTRLEN];
 
+//the message structure used to send message to other servers
 typedef struct message_struct{
 	int source;			//source server's ID
-	bool request;
-	bool feedback;
+	bool request;		// set request to true if sending request to other servers
+	bool feedback;		// set true if sending feedback to other servers
 
-	char request_type[10];
+	char request_type[10];		//request type, can be"get", "insert", "delete", "update", "show-all", or "search"
 
-	int key;
+	int key;				
 	int value;
 	time_t timestamp;
 } message;
 
+//value structure to put into our key_value map
 typedef struct value_truct{
 	int value;
 	time_t timestamp;
 	int source;
 }val;
-map<int,val> key_value;
+map<int,val> key_value;		//key_value map
 
+//structure to store value used in get function
 typedef struct get_truct{
 	int value;
 	int timestamp;
@@ -107,6 +110,7 @@ int init_recv()
 	return 0;
 }
 
+//udp send
 void server_send(char* destination_IP, int destination_ID, message msg){
 	srand(time(NULL));
 	usleep((rand()%99)/50*delay[destination_ID]);				//delay the message
@@ -155,6 +159,7 @@ void server_send(char* destination_IP, int destination_ID, message msg){
 	close(sockfd);	
 }
 
+//function to delete a key's replica from all servers
 void delete_key(int key){
 	key_value.erase(key);
 	message msg;
@@ -170,6 +175,11 @@ void delete_key(int key){
 	}
 }
 
+
+//function to get a key, depend on the consistency level
+//if level 1, the server will send requests and print the key-value returned fastest
+//if level 9, the server will send requests and print out the key-value after it get all three replicas, 
+//and if there's inconsistency, the value with largest timestamp will win
 void get_key(int key, int level){
 	if(level = 1){
 		if(key_value.find(key) != key_value.end()){
@@ -203,6 +213,9 @@ void get_key(int key, int level){
 	}
 }
 
+//function to insert a key, depend on the consistency level
+//if level 1, the server will just store the key-value pair locally
+//if level 9, the server will store key-value pair to server with server_id != key mod 4
 void insert_key(int key, int value, int level){
 	if(level = 1){
 		if(key_value.find(key) == key_value.end()){
@@ -210,11 +223,41 @@ void insert_key(int key, int value, int level){
 			input.value = value;
 			input.source = server_id;
 			input.timestamp = time(0);
-			cout<<"time stamp is "<< input.timestamp<<'\n';
+			cout<<"inserted key "<< key<<" with value "<< value<<" at level "<<level<<'\n';
 			key_value.insert(pair<int, val> (key, input));
 		}
 	}else{
+		message msg;
+		msg.request = true;
+		msg.source = server_id;
+		msg.feedback = false;
+		strcpy(msg.request_type,"insert");
+		msg.key = key;
+		msg.value = value;
+		msg.timestamp = time(0);
 		
+		if(((key%SERVER_NO) == server_id) && (key_value.find(key) == key_value.end())){
+
+			for(int i = 0; i < SERVER_NO; i++){
+				if(server_id != i){
+					server_send(IP[i], i, msg);
+				}
+			}
+			cout<<"inserted key "<< key<<" with value "<< value<<" at level "<<level<<'\n';
+		}else if (key_value.find(key) == key_value.end()){
+			val input;
+			input.value = value;
+			input.source = server_id;
+			input.timestamp = msg.timestamp;		
+			key_value.insert(pair<int, val> (key, input));
+
+			for(int i = 0; i < SERVER_NO; i++){
+				if((server_id != i) && (i != (key%SERVER_NO))){
+					server_send(IP[i], i, msg);
+				}
+			}
+			cout<<"inserted key "<< key<<" with value "<< value<<" at level "<<level<<'\n';
+		}
 	}
 }
 
@@ -238,12 +281,15 @@ void* server_accept(void *identifier){
 	while(1){
 		message msg;
 		if(server_receive(&msg) > 0){
+			//if the message is a request
 			if(msg.request == true){
 				string type = msg.request_type;
+				//if the request is delete, just delete
 				if(type.compare("delete") == 0){
 				
-					key_value.erase(msg.key);
+					if(key_value.find(msg.key) != key_value.end()) key_value.erase(msg.key);
 					
+				//if the request is get, return the key-value pair
 				}else if(type.compare("get") == 0){
 					
 					if(key_value.find(msg.key) != key_value.end()){
@@ -253,13 +299,22 @@ void* server_accept(void *identifier){
 						fb.feedback = true;
 						fb.key = msg.key;
 						strcpy(fb.request_type,"get");
-						fb.value = (key_value.find(key)->second).value;
-						fb.timestamp = (key_value.find(key)->second).timestamp;
+						fb.value = (key_value.find(msg.key)->second).value;
+						fb.timestamp = (key_value.find(msg.key)->second).timestamp;
 						server_send(IP[msg.source], msg.source, fb);
 						
 					}
-					
+				
+				//if the request is insert , just insert the key-value pair 
 				}else if(type.compare("insert") == 0){
+					if(key_value.find(msg.key) == key_value.end()){
+						val input;
+						input.value = msg.value;
+						input.source = msg.source;
+						input.timestamp = msg.timestamp;
+						cout<<"inserted key "<< msg.key<<" with value "<< msg.value<<'\n';
+						key_value.insert(pair<int, val> (msg.key, input));
+					}
 					
 				}else if(type.compare("update") == 0){
 					
@@ -269,6 +324,7 @@ void* server_accept(void *identifier){
 					
 				}
 			}
+		//if the message is feedback
 		}else if(msg.feedback == true){
 			string type = msg.request_type;
 			
@@ -290,8 +346,6 @@ void* server_accept(void *identifier){
 					cout<< "found key " << msg.key<< "with value "<<(get_map.find(msg.key)->second).value << "in level 3\n";
 					get_map.erase(msg.key);
 				}
-					
-			}else if(type.compare("insert") == 0){
 					
 			}else if(type.compare("update") == 0){
 					
