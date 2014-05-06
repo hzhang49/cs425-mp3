@@ -349,7 +349,7 @@ void* server_accept(void *identifier){
 			string type = msg.request_type;
 			
 			/*if it's get feedback, and our server is still waiting for that key's replica*/
-			if((type.compare("get") == 0) && (get_map.find(msg.key) != get_map.end())){
+			if((type.compare("get") == 0) && ((get_map.find(msg.key) != get_map.end()))){
 				(get_map.find(msg.key)->second).level--;		//decrement consistency level
 				if((get_map.find(msg.key)->second).value == msg.value){
 					
