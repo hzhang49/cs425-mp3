@@ -307,7 +307,10 @@ void* server_accept(void *identifier){
 				//if the request is delete, just delete
 				if(type.compare("delete") == 0){
 				
-					if(key_value.find(msg.key) != key_value.end()) key_value.erase(msg.key);
+					if(key_value.find(msg.key) != key_value.end()){
+						key_value.erase(msg.key);
+						cout<<"server "<< server_id<<" deleted key "<< msg.key<<"\n";
+					}
 					
 				//if the request is get, return the key-value pair
 				}else if(type.compare("get") == 0){
@@ -418,11 +421,16 @@ int main(int argc, char *argv[]){
 	
 	while(1){
 		std::string op;
-		char temp[10];
+		char temp[100];
 		int op1, op2, op3;
-		scanf("%s %i %i %i",temp, &op1, &op2, &op3);
-		op = temp;
-		//std::cout << "we get "<< op<< op1<< op2<< op3<<'\n';
+		//scanf("%[^\n]s",temp);
+		cin.getline(temp, 100);
+		char temp1[20];
+
+		sscanf(temp, "%s %d %d %d", temp1, &op1, &op2, &op3);
+		op = temp1;
+		//cout<<"get command: "<< op<<"\n";
+		//std::cout << "we get "<<temp<<op<<op1<< op2<< op3<<'\n';
 		if(op.compare("delete") == 0){
 			delete_key(op1);
 		}else if(op.compare("get") == 0){
