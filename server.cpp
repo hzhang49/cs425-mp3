@@ -17,6 +17,7 @@
 #include <string>
 #include <string.h>
 #include <map>
+#include <queue>          // std::queue
 
 #define		SERVER_NO	4
 
@@ -81,6 +82,11 @@ typedef struct search_truct{
 }ser;
 map<int, ser> search_map;
 
+typedef struct stdinput_struct{
+	char input[100];
+}stdinput;
+
+queue<stdinput> input_queue;
 
 
 /*This is a helper function to set up UDP receive*/
@@ -509,6 +515,19 @@ void* server_accept(void *identifier){
 					}
 					if((get_map.find(msg.key)->second).level == 0){
 						cout<< "found key " << msg.key<< " with value "<<(get_map.find(msg.key)->second).value << "\n";
+						for(int i = 0; i < SERVER_NO; i++){
+							
+							message repair;
+							repair.source = server_id;
+							repair.request = true;
+							repair.feedback = false;
+							strcpy(repair.request_type,"update");
+							repair.key = msg.key;
+							repair.value = (get_map.find(msg.key)->second).value;
+							repair.timestamp = (get_map.find(msg.key)->second).timestamp;
+							server_send(IP[i], i, repair);
+								
+						}
 						get_map.erase(msg.key);
 					}
 					
@@ -580,7 +599,14 @@ void* server_accept(void *identifier){
 	}
 	
 }
-
+void* read_input(void *identifier){
+	while(1){
+		
+		stdinput in;
+		cin.getline(in.input, 100);
+		input_queue.push(in);
+	}
+}
 
 int main(int argc, char *argv[]){
 	if (argc != 2) {
@@ -613,37 +639,42 @@ int main(int argc, char *argv[]){
 	}
 	init_recv();
 	
-	pthread_t t;
+	pthread_t t, r;
 	pthread_create(&t, NULL, &server_accept, NULL);
+	pthread_create(&t, NULL, &read_input, NULL);
 
 
 	
 	while(1){
-		std::string op;
-		char temp[100];
-		int op1, op2, op3;
-		//scanf("%[^\n]s",temp);
-		cin.getline(temp, 100);
-		char temp1[20];
+		if(!input_queue.empty()){
+			stdinput out = input_queue.front();
+			input_queue.pop();
+			std::string op;
+			//char temp[100];
+			int op1, op2, op3;
+			//scanf("%[^\n]s",temp);
+			//cin.getline(temp, 100);
+			char temp1[20];
 
-		sscanf(temp, "%s %d %d %d", temp1, &op1, &op2, &op3);
-		op = temp1;
-		//cout<<"get command: "<< op<<"\n";
-		//std::cout << "we get "<<temp<<op<<op1<< op2<< op3<<'\n';
-		if(op.compare("delete") == 0){
-			delete_key(op1);
-		}else if(op.compare("get") == 0){
-			get_key(op1, op2);
-		}else if(op.compare("insert") == 0){
-			insert_key(op1, op2, op3);
-		}else if(op.compare("update") == 0){
-			update_key(op1, op2, op3);
-		}else if(op.compare("show-all") == 0){
-			show_all();
-		}else if(op.compare("search") == 0){
-			search_key(op1);
-		}else{
-			printf("wrong operation\n");
+			sscanf(out.input, "%s %d %d %d", temp1, &op1, &op2, &op3);
+			op = temp1;
+			//cout<<"get command: "<< op<<"\n";
+			//std::cout << "we get "<<temp<<op<<op1<< op2<< op3<<'\n';
+			if(op.compare("delete") == 0){
+				delete_key(op1);
+			}else if(op.compare("get") == 0){
+				get_key(op1, op2);
+			}else if(op.compare("insert") == 0){
+				insert_key(op1, op2, op3);
+			}else if(op.compare("update") == 0){
+				update_key(op1, op2, op3);
+			}else if(op.compare("show-all") == 0){
+				show_all();
+			}else if(op.compare("search") == 0){
+				search_key(op1);
+			}else{
+				printf("wrong operation\n");
+			}
 		}
 	}
 
