@@ -36,12 +36,12 @@ char recv_s[INET6_ADDRSTRLEN];
 
 //the message structure used to send message to other servers
 typedef struct message_struct{
-	int source;			//source server's ID
+
 	bool request;		// set request to true if sending request to other servers
 	bool feedback;		// set true if sending feedback to other servers
 	bool success;
 	char request_type[10];		//request type, can be"get", "insert", "delete", "update", "show-all", or "search"
-
+	int source;			//source server's ID
 	int key;				
 	int value;
 	time_t timestamp;
@@ -64,16 +64,24 @@ typedef struct get_truct{
 }get;
 map<int, get> get_map;
 
-//structure to store value used in get function
+//structure to store value used in update function
 typedef struct update_truct{
 	int level;
 	int con_level;
 }update;
 map<int, update> update_map;
 
-bool has[SERVER_NO];
-int value[SERVER_NO];
-int level;
+
+//structure to store value used in search function
+typedef struct search_truct{
+	bool has[SERVER_NO];
+	int value[SERVER_NO];
+	int level;
+	time_t timestamp[SERVER_NO];
+}ser;
+map<int, ser> search_map;
+
+
 
 /*This is a helper function to set up UDP receive*/
 int init_recv()
@@ -115,12 +123,13 @@ int init_recv()
 	freeaddrinfo(recv_servinfo);
     
 	//printf("listener: waiting to recvfrom...\n");
-	fcntl(recv_sockfd, F_SETFL, fcntl(recv_sockfd, F_GETFL) | O_NONBLOCK);
+	//fcntl(recv_sockfd, F_SETFL, fcntl(recv_sockfd, F_GETFL) | O_NONBLOCK);
 	return 0;
 }
 
 //udp send
 void server_send(char* destination_IP, int destination_ID, message msg){
+	
 	srand(time(NULL));
 	usleep((rand()%99)/50*delay[destination_ID]);				//delay the message
 	
@@ -352,15 +361,20 @@ void show_all(){
 }
 
 void search_key(int key){
+	ser input;
 	for(int i = 0; i < SERVER_NO; i++){
-		has[i] = false;
-		value[i] = -1;
-		level = 3;
+		input.has[i] = false;
+		input.value[i] = -1;
+		input.level = 3;
+		//input.timestamp = (time_t)0;
 	}
+	
 	if(key_value.find(key) != key_value.end()){
-		has[server_id] = true;
-		value[server_id] = key_value.find(key)->second.value;
+		input.has[server_id] = true;
+		input.value[server_id] = key_value.find(key)->second.value;
 	}
+	search_map.insert(pair<int, ser>(key, input));
+
 	message msg;
 	msg.source = server_id;
 	msg.request = true;
@@ -383,6 +397,7 @@ void* server_accept(void *identifier){
 	while(1){
 		message msg;
 		if(server_receive(&msg) > 0){
+		
 			//if the message is a request
 			if(msg.request == true){
 				string type = msg.request_type;
@@ -406,6 +421,7 @@ void* server_accept(void *identifier){
 						strcpy(fb.request_type,"get");
 						fb.value = (key_value.find(msg.key)->second).value;
 						fb.timestamp = (key_value.find(msg.key)->second).timestamp;
+		
 						server_send(IP[msg.source], msg.source, fb);
 						
 					}
@@ -448,6 +464,7 @@ void* server_accept(void *identifier){
 						}
 					}					
 				}else if(type.compare("search") == 0){
+					//cout<<"server  "<< server_id <<" got request "<<"\n";
 					if(key_value.find(msg.key) != key_value.end()){
 						message fb;
 						fb.request = false;
@@ -455,7 +472,8 @@ void* server_accept(void *identifier){
 						fb.feedback = true;
 						fb.success = true;
 						fb.key = msg.key;
-						fb.value = key_value.find(msg.key)->second.value;
+						fb.value = (key_value.find(msg.key)->second).value;
+						fb.timestamp = (key_value.find(msg.key)->second).timestamp;
 						strcpy(fb.request_type,"search");
 						server_send(IP[msg.source], msg.source, fb);
 					}else{
@@ -469,67 +487,96 @@ void* server_accept(void *identifier){
 						server_send(IP[msg.source], msg.source, fb);
 					}
 				}
-			}
-		//if the message is feedback
-		}else if(msg.feedback == true){
-			string type = msg.request_type;
+			//if it's a feedback
+			}else if(msg.feedback == true){
+
+				string type = msg.request_type;
 			
 			/*if it's get feedback, and our server is still waiting for that key's replica*/
-			if((type.compare("get") == 0) && ((get_map.find(msg.key) != get_map.end()))){
-				(get_map.find(msg.key)->second).level--;		//decrement consistency level
-				if((get_map.find(msg.key)->second).value == msg.value){
+				if((type.compare("get") == 0) && ((get_map.find(msg.key) != get_map.end()))){
+					//cout<<"got search feedback from "<< msg.source <<" with value "<<msg.value<<"\n";
+					(get_map.find(msg.key)->second).level--;		//decrement consistency level
+					if((get_map.find(msg.key)->second).value == msg.value){
 					
-					//update timestamp if our key's current timestamp is earlier then the one we get from msg
-					if((get_map.find(msg.key)->second).timestamp < msg.timestamp) (get_map.find(msg.key)->second).timestamp = msg.timestamp;
+						//update timestamp if our key's current timestamp is earlier then the one we get from msg
+						if((get_map.find(msg.key)->second).timestamp < msg.timestamp) (get_map.find(msg.key)->second).timestamp = msg.timestamp;
 				
-				//if our value is different from the one we get from other server, and their value is newer, update ours
-				}else if(((get_map.find(msg.key)->second).value != msg.value) && ((get_map.find(msg.key)->second).timestamp < msg.timestamp)){
-					(get_map.find(msg.key)->second).value = msg.value;
-					(get_map.find(msg.key)->second).timestamp = msg.timestamp;
+					//if our value is different from the one we get from other server, and their value is newer, update ours
+					}else if(((get_map.find(msg.key)->second).value != msg.value) && ((get_map.find(msg.key)->second).timestamp < msg.timestamp)){
+						(get_map.find(msg.key)->second).value = msg.value;
+						(get_map.find(msg.key)->second).timestamp = msg.timestamp;
 					
-				}
-				if((get_map.find(msg.key)->second).level == 0){
-					cout<< "found key " << msg.key<< " with value "<<(get_map.find(msg.key)->second).value << "\n";
-					get_map.erase(msg.key);
-				}
-					
-			}else if((type.compare("update")) == 0 && (update_map.find(msg.key) != update_map.end())){
-				if((msg.success ==  false) && ((update_map.find(msg.key)->second).con_level == 9)){
-					cout<<"update failed\n";
-					update_map.erase(msg.key);
-					
-				}else if((msg.success ==  false) && ((update_map.find(msg.key)->second).con_level == 1) && ((update_map.find(msg.key)->second).level == 1)){
-					cout<<"update failed\n";
-					update_map.erase(msg.key);
-				}else if((msg.success ==  false) && ((update_map.find(msg.key)->second).con_level == 1)){
-					(update_map.find(msg.key)->second).level--;
-				}else if((msg.success ==  true) && ((update_map.find(msg.key)->second).con_level == 1)){
-					cout<<"successfully update key "<<msg.key<<" with value "<< msg.value<< " on level 1\n";
-					update_map.erase(msg.key);
-				}else if((msg.success ==  true) && ((update_map.find(msg.key)->second).con_level == 9)){
-					(update_map.find(msg.key)->second).level--;
-					//cout<<"decrementing level\n";
-					if((update_map.find(msg.key)->second).level == 0){
-						cout<<"successfully update key "<<msg.key<<" with value "<< msg.value<< " on level 9\n";
-						update_map.erase(msg.key);
 					}
-				}
+					if((get_map.find(msg.key)->second).level == 0){
+						cout<< "found key " << msg.key<< " with value "<<(get_map.find(msg.key)->second).value << "\n";
+						get_map.erase(msg.key);
+					}
 					
-			}else if(type.compare("search") == 0){
-				if(msg.success == true){
-					has[msg.source] = true;
-					value[msg.source] = msg.value;
-				}
-				level--;
-				if(level <=0){
-					for(int i = 0; i < SERVER_NO; i++){
-						if(has[i] == true){
-							cout<<"server "<<i<<" has key "<<msg.key<<" with value "<<value[i]<<"\n";
+				}else if((type.compare("update")) == 0 && (update_map.find(msg.key) != update_map.end())){
+					if((msg.success ==  false) && ((update_map.find(msg.key)->second).con_level == 9)){
+						cout<<"update failed\n";
+						update_map.erase(msg.key);
+					
+					}else if((msg.success ==  false) && ((update_map.find(msg.key)->second).con_level == 1) && ((update_map.find(msg.key)->second).level == 1)){
+						cout<<"update failed\n";
+						update_map.erase(msg.key);
+					}else if((msg.success ==  false) && ((update_map.find(msg.key)->second).con_level == 1)){
+						(update_map.find(msg.key)->second).level--;
+					}else if((msg.success ==  true) && ((update_map.find(msg.key)->second).con_level == 1)){
+						cout<<"successfully update key "<<msg.key<<" with value "<< msg.value<< " on level 1\n";
+						update_map.erase(msg.key);
+					}else if((msg.success ==  true) && ((update_map.find(msg.key)->second).con_level == 9)){
+						(update_map.find(msg.key)->second).level--;
+						//cout<<"decrementing level\n";
+						if((update_map.find(msg.key)->second).level == 0){
+							cout<<"successfully update key "<<msg.key<<" with value "<< msg.value<< " on level 9\n";
+							update_map.erase(msg.key);
 						}
 					}
+					
+				}else if((type.compare("search") == 0) && (search_map.find(msg.key) != search_map.end())){
+					//cout<<"got search feedback from "<< msg.source <<"with success "<<(int)(msg.success)<<"\n";
+					if(msg.success == true){
+						(search_map.find(msg.key)->second).has[msg.source] = true;
+						(search_map.find(msg.key)->second).value[msg.source] = msg.value;
+						(search_map.find(msg.key)->second).timestamp[msg.source] = msg.timestamp;
+					}
+					(search_map.find(msg.key)->second).level--;
+					if(search_map.find(msg.key)->second.level <=0){
+						for(int i = 0; i < SERVER_NO; i++){
+							if(search_map.find(msg.key)->second.has[i] == true){
+								cout<<"server "<<i<<" has key "<<msg.key<<" with value "<<(search_map.find(msg.key)->second).value[i]<<"\n";
+							}
+						}
+						
+						int newest_server = 0;
+						for(int i = 0; i < SERVER_NO; i++){
+							if((search_map.find(msg.key)->second).timestamp[i] > (search_map.find(msg.key)->second).timestamp[newest_server]){					
+								newest_server = i;
+							}
+						}
+						for(int i = 0; i < SERVER_NO; i++){
+							if((search_map.find(msg.key)->second).value[i] != (search_map.find(msg.key)->second).value[newest_server]){
+								message repair;
+								repair.source = newest_server;
+								repair.request = true;
+								repair.feedback = false;
+								strcpy(repair.request_type,"update");
+								repair.key = msg.key;
+								repair.value = (search_map.find(msg.key)->second).value[newest_server];
+								repair.timestamp = (search_map.find(msg.key)->second).timestamp[newest_server];
+								server_send(IP[i], i, repair);
+							}
+						}
+
+						search_map.erase(msg.key);
+					}
+					
+
 				}
 			}
 		}
+		
 	}
 	
 }
