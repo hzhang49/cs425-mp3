@@ -71,6 +71,9 @@ typedef struct update_truct{
 }update;
 map<int, update> update_map;
 
+bool has[SERVER_NO];
+int value[SERVER_NO];
+int level;
 
 /*This is a helper function to set up UDP receive*/
 int init_recv()
@@ -349,7 +352,27 @@ void show_all(){
 }
 
 void search_key(int key){
+	for(int i = 0; i < SERVER_NO; i++){
+		has[i] = false;
+		value[i] = -1;
+		level = 3;
+	}
+	if(key_value.find(key) != key_value.end()){
+		has[server_id] = true;
+		value[server_id] = key_value.find(key)->second.value;
+	}
+	message msg;
+	msg.source = server_id;
+	msg.request = true;
+	msg.feedback = false;
+	strcpy(msg.request_type,"search");
+	msg.key = key;
 
+	for(int i = 0; i < SERVER_NO; i++){
+		if(server_id != i){
+			server_send(IP[i], i, msg);
+		}
+	}
 }
 
 int server_receive(message* msg){
@@ -424,10 +447,27 @@ void* server_accept(void *identifier){
 							server_send(IP[msg.source], msg.source, fb);
 						}
 					}					
-				}else if(type.compare("show-all") == 0){
-					
 				}else if(type.compare("search") == 0){
-					
+					if(key_value.find(msg.key) != key_value.end()){
+						message fb;
+						fb.request = false;
+						fb.source = server_id;
+						fb.feedback = true;
+						fb.success = true;
+						fb.key = msg.key;
+						fb.value = key_value.find(msg.key)->second.value;
+						strcpy(fb.request_type,"search");
+						server_send(IP[msg.source], msg.source, fb);
+					}else{
+						message fb;
+						fb.request = false;
+						fb.source = server_id;
+						fb.feedback = true;
+						fb.success = false;
+						fb.key = msg.key;
+						strcpy(fb.request_type,"search");
+						server_send(IP[msg.source], msg.source, fb);
+					}
 				}
 			}
 		//if the message is feedback
@@ -475,10 +515,19 @@ void* server_accept(void *identifier){
 					}
 				}
 					
-			}else if(type.compare("show-all") == 0){
-					
 			}else if(type.compare("search") == 0){
-					
+				if(msg.success == true){
+					has[msg.source] = true;
+					value[msg.source] = msg.value;
+				}
+				level--;
+				if(level <=0){
+					for(int i = 0; i < SERVER_NO; i++){
+						if(has[i] == true){
+							cout<<"server "<<i<<" has key "<<msg.key<<" with value "<<value[i]<<"\n";
+						}
+					}
+				}
 			}
 		}
 	}
