@@ -45,6 +45,7 @@ typedef struct message_struct{
 	int key;				
 	int value;
 	time_t timestamp;
+
 } message;
 
 //value structure to put into our key_value map
@@ -340,7 +341,11 @@ void update_key(int key, int value, int level){
 }
 
 void show_all(){
-
+	
+	for(map<int, val>::iterator it = key_value.begin(); it != key_value.end(); ++it){
+		cout<<"key "<<it->first<<" with value "<<it->second.value<<"\n";
+	}
+	
 }
 
 void search_key(int key){
