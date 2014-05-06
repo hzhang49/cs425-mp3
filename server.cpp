@@ -68,6 +68,8 @@ map<int, get> get_map;
 //structure to store value used in update function
 typedef struct insert_truct{
 	int level;
+	int con_level;
+	int value;
 }ins;
 map<int, ins> insert_map;
 
@@ -265,8 +267,8 @@ void get_key(int key, int level){
 }
 
 //function to insert a key, depend on the consistency level
-//if level 1, the server will just store the key-value pair locally
-//if level 9, the server will store key-value pair to server with server_id != key mod 4
+//if level 1, the server will return after get one ack from servers
+//if level 9, the server will store key-value pair to server with server_id != key mod 4, and return when all acks got from servers
 void insert_key(int key, int value, int level){
 
 	//if(level == 1){
@@ -292,13 +294,16 @@ void insert_key(int key, int value, int level){
 		ins insr;
 		if(level == 1){
 			insr.level = 1;
+			insr.con_level = 1;
 		}else{
 			insr.level = 3;
+			insr.con_level = 9;
 		}
+		insr.value = value;
 		insert_map.insert(pair<int, ins>(key, insr));
 
 		for(int i = 0; i < SERVER_NO; i++){
-			if(server_id != (key%SERVER_NO)){
+			if(i != (key%SERVER_NO)){
 				server_send(IP[i], i, msg);
 			}
 		}
@@ -331,9 +336,9 @@ void insert_key(int key, int value, int level){
 
 void update_key(int key, int value, int level){
 
-	if(level == 1){
+	//if(level == 1){
 		
-		if(key_value.find(key) != key_value.end()){
+		/*if(key_value.find(key) != key_value.end()){
 			cout<<"updated key "<<key<<" with value "<<value << " at level 1\n";
 			key_value.find(key)->second.value = value;
 			key_value.find(key)->second.timestamp = time(0);
@@ -357,11 +362,18 @@ void update_key(int key, int value, int level){
 					server_send(IP[i], i, msg);
 				}
 			}
-		}
-	}else{
+		}*/
+	//}else{
 		update input;
+	if(level == 1){
+		input.level = 1;
+		input.con_level = 1;
+	}else{
 		input.level = 3;
 		input.con_level = 9;
+	}
+		
+		
 		update_map.insert(pair<int, update>(key, input));
 
 		message msg;
@@ -374,11 +386,14 @@ void update_key(int key, int value, int level){
 		msg.timestamp = time(0);
 	
 		for(int i = 0; i < SERVER_NO; i++){
-			if(server_id != i){
+			if(i != (key%SERVER_NO)){
 				server_send(IP[i], i, msg);
 			}
 		}
-	}
+	//}
+	while(update_map.find(key) != update_map.end());
+	cout<<"successfully update key "<<key<<" with value "<< value<< " on level "<<level<<"\n";
+	
 }
 
 void show_all(){
@@ -416,6 +431,8 @@ void search_key(int key){
 			server_send(IP[i], i, msg);
 		}
 	}
+	while(search_map.find(key) != search_map.end());
+
 }
 
 int server_receive(message* msg){
@@ -464,7 +481,28 @@ void* server_accept(void *identifier){
 						input.timestamp = msg.timestamp;
 						cout<<"inserted key "<< msg.key<<" with value "<< msg.value<<'\n';
 						key_value.insert(pair<int, val> (msg.key, input));
-					}
+							
+						message fb;
+						fb.request = false;
+						fb.source = server_id;
+						fb.feedback = true;
+						fb.success = true;
+						fb.key = msg.key;
+						//fb.value = msg.value;
+						strcpy(fb.request_type,"insert");
+						server_send(IP[msg.source], msg.source, fb);
+						
+					}/*else{
+						message fb;
+						fb.request = false;
+						fb.source = server_id;
+						fb.feedback = true;
+						fb.success = false;
+						fb.key = msg.key;
+						//fb.value = msg.value;
+						strcpy(fb.request_type,"insert");
+						server_send(IP[msg.source], msg.source, fb);
+					}*/
 					
 				}else if(type.compare("update") == 0){
 					if(key_value.find(msg.key) != key_value.end()){
@@ -555,7 +593,7 @@ void* server_accept(void *identifier){
 					}
 					
 				}else if((type.compare("update")) == 0 && (update_map.find(msg.key) != update_map.end())){
-					if((msg.success ==  false) && ((update_map.find(msg.key)->second).con_level == 9)){
+					/*if((msg.success ==  false) && ((update_map.find(msg.key)->second).con_level == 9)){
 						cout<<"update failed\n";
 						update_map.erase(msg.key);
 					
@@ -574,8 +612,43 @@ void* server_accept(void *identifier){
 							cout<<"successfully update key "<<msg.key<<" with value "<< msg.value<< " on level 9\n";
 							update_map.erase(msg.key);
 						}
+					}*/
+
+					(update_map.find(msg.key)->second).level--;
+					if((update_map.find(msg.key)->second).level == 0){
+						update_map.erase(msg.key);
 					}
-					
+				}else if((type.compare("insert") == 0) && (insert_map.find(msg.key) != insert_map.end())){
+					/*if(msg.success == true){
+						insert_map.find(msg.key)->second.level--;
+					}else if((msg.success == false) && (insert_map.find(msg.key)->second.con_level == 9)){
+						cout<<"insert failed because some server already has the key!\n";
+						insert_map.erase(msg.key);
+
+						key_value.erase(key);
+
+						message del;
+						del.source = server_id;
+						del.request = true;
+						del.feedback = false;
+						strcpy(del.request_type,"delete");
+						del.key = msg.key;
+						for(int i = 0; i < SERVER_NO; i++){
+							
+							server_send(IP[i], i, msg);
+
+						}
+					}else if((msg.success == false) && (insert_map.find(msg.key)->second.con_level == 1)){
+						insert_map.find(msg.key)->second.level--;
+					}*/
+					insert_map.find(msg.key)->second.level--;
+					if(insert_map.find(msg.key)->second.level == 0){
+						//cout<<"successfully inserted key "<<msg.key<<"with value "<< insert_map.find(msg.key)->second.value<<" at level "<< insert_map.find(msg.key)->second.con_level<<"\n";
+						insert_map.erase(msg.key);
+					}
+
+
+	
 				}else if((type.compare("search") == 0) && (search_map.find(msg.key) != search_map.end())){
 					//cout<<"got search feedback from "<< msg.source <<"with success "<<(int)(msg.success)<<"\n";
 					if(msg.success == true){
@@ -591,7 +664,7 @@ void* server_accept(void *identifier){
 							}
 						}
 						
-						int newest_server = 0;
+						/*int newest_server = 0;
 						for(int i = 0; i < SERVER_NO; i++){
 							if((search_map.find(msg.key)->second).timestamp[i] > (search_map.find(msg.key)->second).timestamp[newest_server]){					
 								newest_server = i;
@@ -609,7 +682,7 @@ void* server_accept(void *identifier){
 								repair.timestamp = (search_map.find(msg.key)->second).timestamp[newest_server];
 								server_send(IP[i], i, repair);
 							}
-						}
+						}*/
 
 						search_map.erase(msg.key);
 					}
