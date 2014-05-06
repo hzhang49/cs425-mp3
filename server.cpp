@@ -249,7 +249,7 @@ void insert_key(int key, int value, int level){
 			input.value = value;
 			input.source = server_id;
 			input.timestamp = time(0);
-			cout<<"inserted key "<< key<<" with value "<< value<<" at level "<<level<<'\n';
+			cout<<"inserted key "<< key<<" with value "<< value<<'\n';
 			key_value.insert(pair<int, val> (key, input));
 		}
 	}else{
@@ -288,7 +288,9 @@ void insert_key(int key, int value, int level){
 }
 
 void update_key(int key, int value, int level){
+
 	if(level == 1){
+		
 		if(key_value.find(key) != key_value.end()){
 			cout<<"updated key "<<key<<" with value "<<value << " at level 1\n";
 			key_value.find(key)->second.value = value;
@@ -398,6 +400,7 @@ void* server_accept(void *identifier){
 							fb.request = false;
 							fb.source = server_id;
 							fb.feedback = true;
+							fb.success = true;
 							fb.key = msg.key;
 							fb.value = msg.value;
 							strcpy(fb.request_type,"update");
@@ -446,22 +449,23 @@ void* server_accept(void *identifier){
 				}
 					
 			}else if((type.compare("update")) == 0 && (update_map.find(msg.key) != update_map.end())){
-				if((msg.success ==  false) && ((update_map.find(msg.key)->second).con_level = 9)){
+				if((msg.success ==  false) && ((update_map.find(msg.key)->second).con_level == 9)){
 					cout<<"update failed\n";
 					update_map.erase(msg.key);
 					
-				}else if((msg.success ==  false) && ((update_map.find(msg.key)->second).con_level = 1) && ((update_map.find(msg.key)->second).level = 1)){
+				}else if((msg.success ==  false) && ((update_map.find(msg.key)->second).con_level == 1) && ((update_map.find(msg.key)->second).level == 1)){
 					cout<<"update failed\n";
 					update_map.erase(msg.key);
-				}else if((msg.success ==  false) && ((update_map.find(msg.key)->second).con_level = 1)){
+				}else if((msg.success ==  false) && ((update_map.find(msg.key)->second).con_level == 1)){
 					(update_map.find(msg.key)->second).level--;
-				}else if((msg.success ==  true) && ((update_map.find(msg.key)->second).con_level = 1)){
-					cout<<"successfully update key "<<msg.key<<"with value "<< msg.value<< "on level 1\n";
+				}else if((msg.success ==  true) && ((update_map.find(msg.key)->second).con_level == 1)){
+					cout<<"successfully update key "<<msg.key<<" with value "<< msg.value<< " on level 1\n";
 					update_map.erase(msg.key);
-				}else if((msg.success ==  true) && ((update_map.find(msg.key)->second).con_level = 9)){
+				}else if((msg.success ==  true) && ((update_map.find(msg.key)->second).con_level == 9)){
 					(update_map.find(msg.key)->second).level--;
+					//cout<<"decrementing level\n";
 					if((update_map.find(msg.key)->second).level == 0){
-						cout<<"successfully update key "<<msg.key<<"with value "<< msg.value<< "on level 9\n";
+						cout<<"successfully update key "<<msg.key<<" with value "<< msg.value<< " on level 9\n";
 						update_map.erase(msg.key);
 					}
 				}
