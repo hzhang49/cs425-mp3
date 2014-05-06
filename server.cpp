@@ -455,7 +455,7 @@ void* server_accept(void *identifier){
 					update_map.erase(msg.key);
 				}else if((msg.success ==  false) && ((update_map.find(msg.key)->second).con_level = 1)){
 					(update_map.find(msg.key)->second).level--;
-				}else if((msg.success ==  true) && ((update_map.find(msg.key)->second).con_level = 1))
+				}else if((msg.success ==  true) && ((update_map.find(msg.key)->second).con_level = 1)){
 					cout<<"successfully update key "<<msg.key<<"with value "<< msg.value<< "on level 1\n";
 					update_map.erase(msg.key);
 				}else if((msg.success ==  true) && ((update_map.find(msg.key)->second).con_level = 9)){
