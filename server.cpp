@@ -66,6 +66,12 @@ typedef struct get_truct{
 map<int, get> get_map;
 
 //structure to store value used in update function
+typedef struct insert_truct{
+	int level;
+}ins;
+map<int, ins> insert_map;
+
+//structure to store value used in update function
 typedef struct update_truct{
 	int level;
 	int con_level;
@@ -255,6 +261,7 @@ void get_key(int key, int level){
 			}
 		}
 	}
+	while(get_map.find(key) != get_map.end());
 }
 
 //function to insert a key, depend on the consistency level
@@ -262,16 +269,17 @@ void get_key(int key, int level){
 //if level 9, the server will store key-value pair to server with server_id != key mod 4
 void insert_key(int key, int value, int level){
 
-	if(level == 1){
-		if(key_value.find(key) == key_value.end()){
-			val input;
+	//if(level == 1){
+		//if(key_value.find(key) == key_value.end()){
+			/*val input;
 			input.value = value;
 			input.source = server_id;
 			input.timestamp = time(0);
 			cout<<"inserted key "<< key<<" with value "<< value<<'\n';
-			key_value.insert(pair<int, val> (key, input));
-		}
-	}else{
+			key_value.insert(pair<int, val> (key, input));*/
+		//}
+	//}else{
+
 		message msg;
 		msg.request = true;
 		msg.source = server_id;
@@ -280,8 +288,23 @@ void insert_key(int key, int value, int level){
 		msg.key = key;
 		msg.value = value;
 		msg.timestamp = time(0);
-		
-		if(((key%SERVER_NO) == server_id) && (key_value.find(key) == key_value.end())){
+
+		ins insr;
+		if(level == 1){
+			insr.level = 1;
+		}else{
+			insr.level = 3;
+		}
+		insert_map.insert(pair<int, ins>(key, insr));
+
+		for(int i = 0; i < SERVER_NO; i++){
+			if(server_id != (key%SERVER_NO)){
+				server_send(IP[i], i, msg);
+			}
+		}
+		while(insert_map.find(key) != insert_map.end());
+		cout<<"done inserting key "<< key<<" with value "<<value<<" at level "<<level<<"\n";
+		/*if(((key%SERVER_NO) == server_id) && (key_value.find(key) == key_value.end())){
 
 			for(int i = 0; i < SERVER_NO; i++){
 				if(server_id != i){
@@ -302,8 +325,8 @@ void insert_key(int key, int value, int level){
 				}
 			}
 			cout<<"inserted key "<< key<<" with value "<< value<<" at level "<<level<<'\n';
-		}
-	}
+		}*/
+	//}
 }
 
 void update_key(int key, int value, int level){
