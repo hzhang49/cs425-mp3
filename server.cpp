@@ -39,7 +39,7 @@ typedef struct message_struct{
 	int source;			//source server's ID
 	bool request;		// set request to true if sending request to other servers
 	bool feedback;		// set true if sending feedback to other servers
-
+	bool success;
 	char request_type[10];		//request type, can be"get", "insert", "delete", "update", "show-all", or "search"
 
 	int key;				
@@ -58,12 +58,17 @@ map<int,val> key_value;		//key_value map
 //structure to store value used in get function
 typedef struct get_truct{
 	int value;
-	int timestamp;
+	time_t timestamp;
 	int level;
 }get;
 map<int, get> get_map;
 
-
+//structure to store value used in get function
+typedef struct update_truct{
+	int level;
+	int con_level;
+}update;
+map<int, update> update_map;
 
 
 /*This is a helper function to set up UDP receive*/
@@ -237,6 +242,7 @@ void get_key(int key, int level){
 //if level 1, the server will just store the key-value pair locally
 //if level 9, the server will store key-value pair to server with server_id != key mod 4
 void insert_key(int key, int value, int level){
+
 	if(level == 1){
 		if(key_value.find(key) == key_value.end()){
 			val input;
@@ -282,7 +288,53 @@ void insert_key(int key, int value, int level){
 }
 
 void update_key(int key, int value, int level){
+	if(level == 1){
+		if(key_value.find(key) != key_value.end()){
+			cout<<"updated key "<<key<<" with value "<<value << " at level 1\n";
+			key_value.find(key)->second.value = value;
+			key_value.find(key)->second.timestamp = time(0);
+		}else{
+			update input;
+			input.level = 3;
+			input.con_level = 1;
+			update_map.insert(pair<int, update>(key, input));
 
+			message msg;
+			msg.source = server_id;
+			msg.request = true;
+			msg.feedback = false;
+			strcpy(msg.request_type,"update");
+			msg.key = key;
+			msg.value = value;
+			msg.timestamp = time(0);
+		
+			for(int i = 0; i < SERVER_NO; i++){
+				if(server_id != i){
+					server_send(IP[i], i, msg);
+				}
+			}
+		}
+	}else{
+		update input;
+		input.level = 3;
+		input.con_level = 9;
+		update_map.insert(pair<int, update>(key, input));
+
+		message msg;
+		msg.source = server_id;
+		msg.request = true;
+		msg.feedback = false;
+		strcpy(msg.request_type,"update");
+		msg.key = key;
+		msg.value = value;
+		msg.timestamp = time(0);
+	
+		for(int i = 0; i < SERVER_NO; i++){
+			if(server_id != i){
+				server_send(IP[i], i, msg);
+			}
+		}
+	}
 }
 
 void show_all(){
@@ -340,7 +392,30 @@ void* server_accept(void *identifier){
 					}
 					
 				}else if(type.compare("update") == 0){
-					
+					if(key_value.find(msg.key) != key_value.end()){
+						if(key_value.find(msg.key)->second.timestamp < msg.timestamp){
+							message fb;
+							fb.request = false;
+							fb.source = server_id;
+							fb.feedback = true;
+							fb.key = msg.key;
+							fb.value = msg.value;
+							strcpy(fb.request_type,"update");
+							key_value.find(msg.key)->second.value = msg.value;
+							key_value.find(msg.key)->second.timestamp = msg.timestamp;
+							server_send(IP[msg.source], msg.source, fb);
+						}else{
+							message fb;
+							fb.request = false;
+							fb.source = server_id;
+							fb.feedback = true;
+							fb.success = false;
+							fb.key = msg.key;
+							fb.value = msg.value;
+							strcpy(fb.request_type,"update");
+							server_send(IP[msg.source], msg.source, fb);
+						}
+					}					
 				}else if(type.compare("show-all") == 0){
 					
 				}else if(type.compare("search") == 0){
@@ -370,7 +445,26 @@ void* server_accept(void *identifier){
 					get_map.erase(msg.key);
 				}
 					
-			}else if(type.compare("update") == 0){
+			}else if((type.compare("update")) == 0 && (update_map.find(msg.key) != update_map.end())){
+				if((msg.success ==  false) && ((update_map.find(msg.key)->second).con_level = 9)){
+					cout<<"update failed\n";
+					update_map.erase(msg.key);
+					
+				}else if((msg.success ==  false) && ((update_map.find(msg.key)->second).con_level = 1) && ((update_map.find(msg.key)->second).level = 1)){
+					cout<<"update failed\n";
+					update_map.erase(msg.key);
+				}else if((msg.success ==  false) && ((update_map.find(msg.key)->second).con_level = 1)){
+					(update_map.find(msg.key)->second).level--;
+				}else if((msg.success ==  true) && ((update_map.find(msg.key)->second).con_level = 1))
+					cout<<"successfully update key "<<msg.key<<"with value "<< msg.value<< "on level 1\n";
+					update_map.erase(msg.key);
+				}else if((msg.success ==  true) && ((update_map.find(msg.key)->second).con_level = 9)){
+					(update_map.find(msg.key)->second).level--;
+					if((update_map.find(msg.key)->second).level == 0){
+						cout<<"successfully update key "<<msg.key<<"with value "<< msg.value<< "on level 9\n";
+						update_map.erase(msg.key);
+					}
+				}
 					
 			}else if(type.compare("show-all") == 0){
 					
